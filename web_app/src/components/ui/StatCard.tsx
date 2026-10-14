@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { InfoTooltip } from '@/components/ui/Tooltip';
 
 interface StatCardProps {
   label: string;
@@ -6,6 +7,7 @@ interface StatCardProps {
   icon: ReactNode;
   trend?: { value: string; positive: boolean };
   accent?: 'brand' | 'success' | 'warning' | 'danger' | 'accent';
+  tooltip?: string;
 }
 
 const accents = {
@@ -16,7 +18,7 @@ const accents = {
   accent: 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30',
 };
 
-export function StatCard({ label, value, icon, trend, accent = 'brand' }: StatCardProps) {
+export function StatCard({ label, value, icon, trend, accent = 'brand', tooltip }: StatCardProps) {
   return (
     <div className="card card-hover p-5 border border-theme-border">
       <div className="flex items-center justify-between">
@@ -30,7 +32,10 @@ export function StatCard({ label, value, icon, trend, accent = 'brand' }: StatCa
         )}
       </div>
       <p className="mt-4 text-3xl font-display font-extrabold text-white tracking-tight">{value}</p>
-      <p className="mt-1 text-xs font-medium text-slate-400">{label}</p>
+      <div className="mt-1 flex items-center gap-1.5">
+        <p className="text-xs font-medium text-slate-400">{label}</p>
+        {tooltip && <InfoTooltip content={tooltip} position="top" iconSize={13} />}
+      </div>
     </div>
   );
 }

@@ -51,25 +51,34 @@
     box-shadow: 0 8px 25px -4px rgba(124, 58, 237, 0.15);
   }
 
-  /* Input fields */
-  .input-field {
+  /* Form Inputs and Select Dropdowns */
+  .input, .select, .input-field {
     width: 100%;
     border-radius: 0.75rem;
     border: 1px solid #26324A;
-    background-color: #0B1020;
+    background-color: #0B1020 !important;
     padding: 0.625rem 0.875rem;
     font-size: 0.875rem;
-    color: #F8FAFC;
+    color: #F8FAFC !important;
     transition: all 0.15s ease-in-out;
   }
-  .input-field::placeholder {
+  .input::placeholder, .select::placeholder, .input-field::placeholder {
     color: #64748B;
   }
-  .input-field:focus {
+  .input:focus, .select:focus, .input-field:focus {
     border-color: #7C3AED;
     outline: none;
     box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2);
   }
+  select.input, select.select, select.input-field {
+    background-color: #0B1020 !important;
+    color: #F8FAFC !important;
+  }
+  select.input option, select.select option, select.input-field option {
+    background-color: #151E33 !important;
+    color: #F8FAFC !important;
+  }
+
 
   /* Buttons */
   .btn {

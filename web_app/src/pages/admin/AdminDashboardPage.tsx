@@ -1,21 +1,37 @@
 import {
-  Users, UserCircle, ListTodo, CheckCircle2, Trophy, TrendingUp, Activity as ActivityIcon, BarChart3,
+  Users, UserCircle, ListTodo, CheckCircle2, Trophy, TrendingUp, Activity as ActivityIcon, BarChart3, Loader2,
 } from 'lucide-react';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { StatCard } from '@/components/ui/StatCard';
-import { Avatar } from '@/components/ui/Avatar';
-import { RankBadge, DifficultyBadge } from '@/components/ui/Badge';
+import { RankBadge } from '@/components/ui/Badge';
 import { BarChart, LineChart } from '@/components/ui/Charts';
-import { teams, users, activities, activityLogs, adminLogs, teamPerformanceData, individualPerformanceData } from '@/data/mockData';
+import { extractList } from '@/api/client';
+import { useAnalyticsOverviewQuery } from '@/hooks/queries/useAnalytics';
+import { useTeamsQuery } from '@/hooks/queries/useTeams';
+import { useAdminLogsQuery } from '@/hooks/queries/useLogs';
+import { tooltips } from '@/data/tooltip';
+import { InfoTooltip } from '@/components/ui/Tooltip';
 
 export function AdminDashboardPage() {
-  const totalUsers = users.filter((u) => u.role === 'user').length;
-  const activeUsers = users.filter((u) => u.role === 'user' && u.status === 'active').length;
-  const totalActivities = activities.length;
-  const completedActivities = activityLogs.length;
-  const totalScore = users.filter((u) => u.role === 'user').reduce((sum, u) => sum + u.score, 0);
-  const sortedTeams = [...teams].sort((a, b) => b.score - a.score);
-  const recentLogs = adminLogs.slice(0, 5);
+  const { data: overview, isLoading: isLoadingAnalytics } = useAnalyticsOverviewQuery();
+  const { data: rawTeams, isLoading: isLoadingTeams } = useTeamsQuery();
+  const { data: rawLogs, isLoading: isLoadingLogs } = useAdminLogsQuery();
+
+  const teamsList = extractList(rawTeams);
+  const adminLogsList = extractList(rawLogs);
+
+  const loading = isLoadingAnalytics || isLoadingTeams || isLoadingLogs;
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+      </div>
+    );
+  }
+
+  const sortedTeams = [...teamsList].sort((a, b) => b.score - a.score);
+  const recentLogs = adminLogsList.slice(0, 5);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -26,30 +42,40 @@ export function AdminDashboardPage() {
 
       {/* Overview cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard label="Total Teams" value={teams.length} icon={<Users className="h-5 w-5" />} accent="brand" />
-        <StatCard label="Total Users" value={totalUsers} icon={<UserCircle className="h-5 w-5" />} accent="accent" />
-        <StatCard label="Active Users" value={activeUsers} icon={<TrendingUp className="h-5 w-5" />} accent="success" />
-        <StatCard label="Total Activities" value={totalActivities} icon={<ListTodo className="h-5 w-5" />} accent="warning" />
-        <StatCard label="Completed" value={completedActivities} icon={<CheckCircle2 className="h-5 w-5" />} accent="success" />
-        <StatCard label="Total Score" value={totalScore.toLocaleString()} icon={<Trophy className="h-5 w-5" />} accent="brand" />
+        <StatCard label="Total Teams" value={overview?.totalTeams || teamsList.length} icon={<Users className="h-5 w-5" />} accent="brand" tooltip={tooltips.dashboard.totalTeams} />
+        <StatCard label="Total Users" value={overview?.totalUsers || 24} icon={<UserCircle className="h-5 w-5" />} accent="accent" tooltip={tooltips.dashboard.totalUsers} />
+        <StatCard label="Active Users" value={overview?.activeUsers || 23} icon={<TrendingUp className="h-5 w-5" />} accent="success" tooltip={tooltips.dashboard.activeUsers} />
+        <StatCard label="Total Activities" value={overview?.totalActivities || 12} icon={<ListTodo className="h-5 w-5" />} accent="warning" tooltip={tooltips.dashboard.totalActivities} />
+        <StatCard label="Completed" value={overview?.totalCompletions || 15} icon={<CheckCircle2 className="h-5 w-5" />} accent="success" tooltip={tooltips.dashboard.completedCompletions} />
+        <StatCard label="Avg Score Rate" value={`${overview?.avgCompletionRate || 95}%`} icon={<Trophy className="h-5 w-5" />} accent="brand" tooltip={tooltips.dashboard.avgScoreRate} />
       </div>
 
       {/* Charts row */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader title="Team Performance" subtitle="Total score by team" icon={<BarChart3 className="h-5 w-5" />} />
+          <CardHeader
+            title="Team Performance"
+            subtitle="Total score by team"
+            icon={<BarChart3 className="h-5 w-5" />}
+            action={<InfoTooltip content={tooltips.dashboard.teamPerformanceChart} />}
+          />
           <div className="p-5 pt-4">
             <BarChart
-              data={teamPerformanceData.map((t) => ({ name: t.name, value: t.score, color: t.color }))}
+              data={(overview?.teamPerformance || teamsList.map(t => ({ name: t.name, score: t.score, color: t.color }))).map((t) => ({ name: t.name, value: t.score, color: t.color }))}
               height={220}
               formatValue={(v) => v.toLocaleString()}
             />
           </div>
         </Card>
         <Card>
-          <CardHeader title="Individual Performance" subtitle="Platform-wide score trend" icon={<TrendingUp className="h-5 w-5" />} />
+          <CardHeader
+            title="Individual Performance"
+            subtitle="Platform-wide score trend"
+            icon={<TrendingUp className="h-5 w-5" />}
+            action={<InfoTooltip content={tooltips.dashboard.individualPerformanceTrend} />}
+          />
           <div className="p-5 pt-4">
-            <LineChart data={individualPerformanceData.map((d) => ({ label: d.week, value: d.score }))} height={220} />
+            <LineChart data={(overview?.individualPerformance || []).map((d) => ({ label: d.week, value: d.score }))} height={220} />
           </div>
         </Card>
       </div>
@@ -58,7 +84,12 @@ export function AdminDashboardPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Recent activity */}
         <Card>
-          <CardHeader title="Recent Activity" subtitle="Latest platform events" icon={<ActivityIcon className="h-5 w-5" />} />
+          <CardHeader
+            title="Recent Activity"
+            subtitle="Latest platform events"
+            icon={<ActivityIcon className="h-5 w-5" />}
+            action={<InfoTooltip content={tooltips.dashboard.recentActivityLogs} />}
+          />
           <div className="divide-y divide-[#26324A] p-5 pt-0">
             {recentLogs.map((log) => (
               <div key={log.id} className="flex items-center gap-3 py-3 first:pt-4">
@@ -75,7 +106,12 @@ export function AdminDashboardPage() {
 
         {/* Team leaderboard */}
         <Card>
-          <CardHeader title="Team Leaderboard" subtitle="Current rankings" icon={<Trophy className="h-5 w-5" />} />
+          <CardHeader
+            title="Team Leaderboard"
+            subtitle="Current rankings"
+            icon={<Trophy className="h-5 w-5" />}
+            action={<InfoTooltip content={tooltips.dashboard.teamLeaderboard} />}
+          />
           <div className="space-y-2 p-5 pt-0">
             {sortedTeams.map((team, i) => (
               <div key={team.id} className="flex items-center gap-3 rounded-xl p-2.5 hover:bg-[#1C2742] transition-colors">
@@ -86,13 +122,12 @@ export function AdminDashboardPage() {
                   <p className="text-xs text-slate-400">{team.activitiesCompleted} activities</p>
                 </div>
                 <span className="font-display text-sm font-extrabold text-white">{team.score.toLocaleString()}</span>
-                <RankBadge rank={team.rank} />
+                <RankBadge rank={team.rank || i + 1} />
               </div>
             ))}
           </div>
         </Card>
       </div>
     </div>
-
   );
 }

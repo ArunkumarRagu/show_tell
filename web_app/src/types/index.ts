@@ -92,3 +92,19 @@ export interface AdminLog {
   timestamp: string;
   status: 'success' | 'warning' | 'error';
 }
+
+export interface PaginationMeta {
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  meta: PaginationMeta;
+}
+
+

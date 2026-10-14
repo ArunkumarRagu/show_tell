@@ -7,8 +7,14 @@ import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge, RankBadge, DifficultyBadge, ResultBadge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
+import { ReactSelect } from '@/components/ui/ReactSelect';
 import { teams as initialTeams, users, activityLogs } from '@/data/mockData';
 import type { Team } from '@/types';
+
+const statusOptions = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+];
 
 export function AdminTeamsPage() {
   const [teamList, setTeamList] = useState<Team[]>(initialTeams);
@@ -430,15 +436,13 @@ export function AdminTeamsPage() {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-ink-600">Status</label>
-              <select
-                className="input-field"
-                value={editStatus}
-                onChange={(e) => setEditStatus(e.target.value as 'active' | 'inactive')}
-              >
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">Status</label>
+              <ReactSelect
+                options={statusOptions}
+                value={statusOptions.find((opt) => opt.value === editStatus)}
+                onChange={(option) => setEditStatus((option?.value || 'active') as 'active' | 'inactive')}
+                isSearchable={false}
+              />
             </div>
           </div>
         )}

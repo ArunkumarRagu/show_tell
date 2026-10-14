@@ -1,131 +1,144 @@
-import { Settings, Save, Bell, Shield, Clock, Trophy } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Save, Settings as SettingsIcon, Shield, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { useState } from 'react';
+import { useSettingsQuery, useUpdateSettingsMutation } from '@/hooks/queries/useSettings';
+import type { SystemSettingsData } from '@/api/settings';
+import { Tooltip, InfoTooltip } from '@/components/ui/Tooltip';
+import { tooltips } from '@/data/tooltip';
 
 export function AdminSettingsPage() {
-  const [competitionName, setCompetitionName] = useState('HAT Show & Tell 2026');
-  const [maxTeamSize, setMaxTeamSize] = useState(5);
-  const [passingThreshold, setPassingThreshold] = useState(60);
-  const [timerDefault, setTimerDefault] = useState(300);
-  const [emailNotifications, setEmailNotifications] = useState(true);
-  const [activityAlerts, setActivityAlerts] = useState(true);
-  const [leaderboardPublic, setLeaderboardPublic] = useState(true);
+  const { data: remoteSettings, isLoading } = useSettingsQuery();
+  const updateSettingsMutation = useUpdateSettingsMutation();
 
-  const handleSave = () => {
-    toast.success('Settings saved successfully!');
+  const [settings, setSettings] = useState<SystemSettingsData>({
+    competitionName: 'HAT Show & Tell',
+    allowSelfRegistration: false,
+    maxTeamSize: 10,
+    defaultPassingScore: 60,
+    enableLeaderboard: true,
+  });
+
+  useEffect(() => {
+    if (remoteSettings) {
+      setSettings(remoteSettings);
+    }
+  }, [remoteSettings]);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await updateSettingsMutation.mutateAsync(settings);
+      toast.success('System settings saved successfully!');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update settings');
+    }
   };
 
-  const handleReset = () => {
-    setCompetitionName('HAT Show & Tell 2026');
-    setMaxTeamSize(5);
-    setPassingThreshold(60);
-    setTimerDefault(300);
-    setEmailNotifications(true);
-    setActivityAlerts(true);
-    setLeaderboardPublic(true);
-    toast.info('Settings reset to defaults');
-  };
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <p className="mt-1 text-sm text-ink-400">Configure competition rules and platform preferences.</p>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">System Settings</h1>
+          <p className="mt-1 text-sm text-ink-400">Configure global application behavior and competition rules.</p>
+        </div>
+        <Tooltip content={tooltips.settings.saveSettings} position="left">
+          <Button onClick={handleSave} disabled={updateSettingsMutation.isPending}>
+            {updateSettingsMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            Save Settings
+          </Button>
+        </Tooltip>
       </div>
 
-      {/* Competition settings */}
-      <Card className="p-6">
-        <CardHeader title="Competition Settings" subtitle="General competition configuration" icon={<Trophy className="h-5 w-5" />} />
-        <div className="mt-4 space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-600">Competition Name</label>
-            <input type="text" value={competitionName} onChange={(e) => setCompetitionName(e.target.value)} className="input-field" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
+      <form onSubmit={handleSave} className="space-y-6">
+        <Card className="p-6">
+          <CardHeader title="General Settings" icon={<SettingsIcon className="h-5 w-5" />} />
+          <div className="mt-4 space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-ink-600">Max Team Size</label>
-              <input type="number" value={maxTeamSize} onChange={(e) => setMaxTeamSize(Number(e.target.value))} className="input-field" />
+              <label className="mb-1.5 block text-xs font-semibold text-ink-300">Platform / Competition Name</label>
+              <input
+                type="text"
+                value={settings.competitionName}
+                onChange={(e) => setSettings({ ...settings, competitionName: e.target.value })}
+                className="input"
+              />
             </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-ink-600">Passing Threshold (%)</label>
-              <input type="number" value={passingThreshold} onChange={(e) => setPassingThreshold(Number(e.target.value))} className="input-field" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-ink-300">Max Team Size</label>
+                <input
+                  type="number"
+                  value={settings.maxTeamSize}
+                  onChange={(e) => setSettings({ ...settings, maxTeamSize: Number(e.target.value) })}
+                  className="input"
+                />
+              </div>
+              <div>
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <label className="text-xs font-semibold text-ink-300">Default Passing Score (pts)</label>
+                  <InfoTooltip content={tooltips.settings.passThreshold} />
+                </div>
+                <input
+                  type="number"
+                  value={settings.defaultPassingScore}
+                  onChange={(e) => setSettings({ ...settings, defaultPassingScore: Number(e.target.value) })}
+                  className="input"
+                />
+              </div>
             </div>
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-600">Default Timer (seconds)</label>
-            <input type="number" value={timerDefault} onChange={(e) => setTimerDefault(Number(e.target.value))} className="input-field" />
+        </Card>
+
+        <Card className="p-6">
+          <CardHeader title="Security & Access Control" icon={<Shield className="h-5 w-5" />} />
+          <div className="mt-4 space-y-4">
+            <label className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900/60 p-4 cursor-pointer">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-semibold text-white text-sm">Allow Self Registration</p>
+                  <InfoTooltip content={tooltips.settings.maintenanceMode} />
+                </div>
+                <p className="text-xs text-ink-400">If enabled, new users can sign up without admin invitation.</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.allowSelfRegistration}
+                onChange={(e) => setSettings({ ...settings, allowSelfRegistration: e.target.checked })}
+                className="h-5 w-5 rounded border-ink-700 bg-ink-800 text-brand-500 focus:ring-brand-500"
+              />
+            </label>
+
+            <label className="flex items-center justify-between rounded-xl border border-ink-800 bg-ink-900/60 p-4 cursor-pointer">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-semibold text-white text-sm">Enable Public Leaderboard</p>
+                  <InfoTooltip content={tooltips.leaderboard.individualVsTeam} />
+                </div>
+                <p className="text-xs text-ink-400">Display real-time team and user standings on user dashboard.</p>
+              </div>
+              <input
+                type="checkbox"
+                checked={settings.enableLeaderboard}
+                onChange={(e) => setSettings({ ...settings, enableLeaderboard: e.target.checked })}
+                className="h-5 w-5 rounded border-ink-700 bg-ink-800 text-brand-500 focus:ring-brand-500"
+              />
+            </label>
           </div>
-        </div>
-      </Card>
-
-      {/* Notifications */}
-      <Card className="p-6">
-        <CardHeader title="Notifications" subtitle="Alert and notification preferences" icon={<Bell className="h-5 w-5" />} />
-        <div className="mt-4 space-y-4">
-          <ToggleRow
-            label="Email Notifications"
-            description="Send email alerts for activity completions and rank changes"
-            checked={emailNotifications}
-            onChange={setEmailNotifications}
-          />
-          <ToggleRow
-            label="Activity Alerts"
-            description="Real-time alerts when new activities are published"
-            checked={activityAlerts}
-            onChange={setActivityAlerts}
-          />
-          <ToggleRow
-            label="Public Leaderboard"
-            description="Make the leaderboard visible to all users"
-            checked={leaderboardPublic}
-            onChange={setLeaderboardPublic}
-          />
-        </div>
-      </Card>
-
-      {/* Security */}
-      <Card className="p-6">
-        <CardHeader title="Security" subtitle="Access and authentication settings" icon={<Shield className="h-5 w-5" />} />
-        <div className="mt-4 space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-600">Session Timeout (minutes)</label>
-            <input type="number" defaultValue={30} className="input-field" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-600">Minimum Password Length</label>
-            <input type="number" defaultValue={8} className="input-field" />
-          </div>
-        </div>
-      </Card>
-
-      {/* Save */}
-      <div className="flex justify-end gap-3 pb-4">
-        <Button variant="secondary" onClick={handleReset}>Reset to Defaults</Button>
-        <Button onClick={handleSave}>
-          <Save className="h-4 w-4" />
-          Save Changes
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-
-function ToggleRow({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-semibold text-ink-800">{label}</p>
-        <p className="text-xs text-ink-400">{description}</p>
-      </div>
-      <button
-        onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 rounded-full transition-colors ${checked ? 'bg-brand-600' : 'bg-ink-200'}`}
-      >
-        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow-soft transition-transform ${checked ? 'translate-x-5' : 'translate-x-0.5'}`} />
-      </button>
+        </Card>
+      </form>
     </div>
   );
 }

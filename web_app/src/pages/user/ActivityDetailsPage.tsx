@@ -1,20 +1,32 @@
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock, Star, Target, ListChecks, Play, CheckCircle2 } from 'lucide-react';
-import { activities } from '@/data/mockData';
+import { useNavigate, useParams } from '@tanstack/react-router';
+import { ArrowLeft, Clock, Star, Target, ListChecks, Play, CheckCircle2, Loader2 } from 'lucide-react';
+import { useActivityQuery } from '@/hooks/queries/useActivities';
 import { Card } from '@/components/ui/Card';
 import { DifficultyBadge } from '@/components/ui/Badge';
 import { ProgressBar } from '@/components/ui/ProgressBar';
+import { Tooltip, InfoTooltip } from '@/components/ui/Tooltip';
+import { tooltips } from '@/data/tooltip';
 
 export function ActivityDetailsPage() {
-  const { id } = useParams();
+  const params = useParams({ strict: false }) as { id?: string };
+  const id = params?.id;
   const navigate = useNavigate();
-  const activity = activities.find((a) => a.id === id);
+
+  const { data: activity, isLoading } = useActivityQuery(id);
+
+  if (isLoading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-500" />
+      </div>
+    );
+  }
 
   if (!activity) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <p className="text-ink-500">Activity not found.</p>
-        <button onClick={() => navigate('/activities')} className="btn-secondary mt-4">Back to Activities</button>
+        <button onClick={() => navigate({ to: '/activities' })} className="btn-secondary mt-4">Back to Activities</button>
       </div>
     );
   }
@@ -25,7 +37,7 @@ export function ActivityDetailsPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <button onClick={() => navigate('/activities')} className="flex items-center gap-2 text-sm font-medium text-ink-500 hover:text-ink-700">
+      <button onClick={() => navigate({ to: '/activities' })} className="flex items-center gap-2 text-sm font-medium text-ink-500 hover:text-ink-700">
         <ArrowLeft className="h-4 w-4" />
         Back to Activities
       </button>
@@ -45,34 +57,42 @@ export function ActivityDetailsPage() {
         </div>
 
         <div className="grid grid-cols-2 gap-4 p-6 lg:grid-cols-4">
-          <div className="flex items-center gap-3 rounded-xl bg-ink-50 p-3">
-            <Clock className="h-5 w-5 text-brand-600" />
-            <div>
-              <p className="text-xs text-ink-400">Time Limit</p>
-              <p className="text-sm font-bold text-ink-900">{timeStr}</p>
+          <Tooltip content={tooltips.activities.timeLimit} position="top">
+            <div className="flex items-center gap-3 rounded-xl bg-ink-50 p-3 cursor-pointer w-full">
+              <Clock className="h-5 w-5 text-brand-600" />
+              <div>
+                <p className="text-xs text-ink-400">Time Limit</p>
+                <p className="text-sm font-bold text-ink-900">{timeStr}</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl bg-ink-50 p-3">
-            <Star className="h-5 w-5 text-accent-500" />
-            <div>
-              <p className="text-xs text-ink-400">Max Score</p>
-              <p className="text-sm font-bold text-ink-900">{activity.maxScore} pts</p>
+          </Tooltip>
+          <Tooltip content={tooltips.activities.maxScore} position="top">
+            <div className="flex items-center gap-3 rounded-xl bg-ink-50 p-3 cursor-pointer w-full">
+              <Star className="h-5 w-5 text-accent-500" />
+              <div>
+                <p className="text-xs text-ink-400">Max Score</p>
+                <p className="text-sm font-bold text-ink-900">{activity.maxScore} pts</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl bg-ink-50 p-3">
-            <Target className="h-5 w-5 text-success-600" />
-            <div>
-              <p className="text-xs text-ink-400">Passing Score</p>
-              <p className="text-sm font-bold text-ink-900">{activity.passingScore} pts</p>
+          </Tooltip>
+          <Tooltip content={tooltips.activities.passingScore} position="top">
+            <div className="flex items-center gap-3 rounded-xl bg-ink-50 p-3 cursor-pointer w-full">
+              <Target className="h-5 w-5 text-success-600" />
+              <div>
+                <p className="text-xs text-ink-400">Passing Score</p>
+                <p className="text-sm font-bold text-ink-900">{activity.passingScore} pts</p>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl bg-ink-50 p-3">
-            <ListChecks className="h-5 w-5 text-brand-600" />
-            <div>
-              <p className="text-xs text-ink-400">Questions</p>
-              <p className="text-sm font-bold text-ink-900">{activity.questions.length}</p>
+          </Tooltip>
+          <Tooltip content="Total questions included in this module" position="top">
+            <div className="flex items-center gap-3 rounded-xl bg-ink-50 p-3 cursor-pointer w-full">
+              <ListChecks className="h-5 w-5 text-brand-600" />
+              <div>
+                <p className="text-xs text-ink-400">Questions</p>
+                <p className="text-sm font-bold text-ink-900">{activity.questions.length}</p>
+              </div>
             </div>
-          </div>
+          </Tooltip>
         </div>
       </Card>
 
@@ -100,6 +120,7 @@ export function ActivityDetailsPage() {
       <Card className="p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-ink-900">Community Stats</h2>
+          <InfoTooltip content={tooltips.activities.completions} />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -116,10 +137,12 @@ export function ActivityDetailsPage() {
       </Card>
 
       <div className="flex justify-center pb-4">
-        <button onClick={() => navigate(`/activities/${activity.id}/run`)} className="btn-primary px-8 py-3 text-base">
-          <Play className="h-5 w-5" />
-          Start Activity
-        </button>
+        <Tooltip content={tooltips.activities.startActivity} position="top">
+          <button onClick={() => navigate({ to: `/activities/${activity.id}/run` })} className="btn-primary px-8 py-3 text-base">
+            <Play className="h-5 w-5" />
+            Start Activity
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

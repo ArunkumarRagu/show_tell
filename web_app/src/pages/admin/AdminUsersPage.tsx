@@ -1,489 +1,453 @@
 import { useState } from 'react';
-import { UserPlus, Pencil, ArrowRightLeft, Power, Eye, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Plus, Edit2, Trash2, Shield, AlertTriangle, Loader2 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { Card } from '@/components/ui/Card';
-import { Table } from '@/components/ui/Table';
-import { Avatar } from '@/components/ui/Avatar';
-import { StatusBadge, RankBadge, RoleBadge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
-import { Button } from '@/components/ui/Button';
-import { users as initialUsers, teams, activityLogs } from '@/data/mockData';
-import type { User, Role } from '@/types';
+import { Avatar } from '@/components/ui/Avatar';
+import { DataTable, type Column } from '@/components/ui/DataTable';
+import { extractList, extractMeta } from '@/api/client';
+import {
+  useUsersQuery,
+  useCreateUserMutation,
+  useUpdateUserMutation,
+  useDeleteUserMutation,
+} from '@/hooks/queries/useUsers';
+import { useTeamsQuery } from '@/hooks/queries/useTeams';
+import type { User, Role, UserStatus } from '@/types';
+import { Tooltip, InfoTooltip } from '@/components/ui/Tooltip';
+import { tooltips } from '@/data/tooltip';
+import { ReactSelect } from '@/components/ui/ReactSelect';
+
+const roleOptions = [
+  { value: 'user', label: 'User' },
+  { value: 'admin', label: 'Admin' },
+];
+
+const userStatusOptions = [
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+];
+
+function capitalize(str?: string): string {
+  if (!str) return '';
+  return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
+}
+
+function normalizeUser(u: any): User {
+  return {
+    ...u,
+    employeeId: u.employeeId || u.employee_id || '',
+    teamId: u.teamId || u.team_id || '',
+    teamName: u.teamName || u.team_name || '',
+    avatarColor: u.avatarColor || u.avatar_color || '#7C3AED',
+    activitiesCompleted: u.activitiesCompleted ?? u.activities_completed ?? 0,
+    joinedDate: u.joinedDate || u.joined_date || '',
+    lastActive: u.lastActive || u.last_active || '',
+  };
+}
 
 export function AdminUsersPage() {
-  const [userList, setUserList] = useState<User[]>(initialUsers);
-  const [roleFilter, setRoleFilter] = useState<'all' | 'user' | 'admin'>('all');
-  const [addOpen, setAddOpen] = useState(false);
-  const [editUser, setEditUser] = useState<User | null>(null);
-  const [viewUser, setViewUser] = useState<User | null>(null);
-  const [changeTeam, setChangeTeam] = useState<User | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
 
-  // Form states for adding user
-  const [newName, setNewName] = useState('');
-  const [newEmpId, setNewEmpId] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newTeamId, setNewTeamId] = useState(teams[0]?.id || '');
-  const [newRole, setNewRole] = useState<Role>('user');
+  const { data: usersData, isLoading: isLoadingUsers, isFetching: isFetchingUsers } = useUsersQuery({
+    page: currentPage,
+    page_size: pageSize,
+  });
+  const usersList = extractList(usersData).map(normalizeUser);
+  const usersMeta = extractMeta(usersData);
 
-  // Form states for editing user
-  const [editName, setEditName] = useState('');
-  const [editEmpId, setEditEmpId] = useState('');
-  const [editEmail, setEditEmail] = useState('');
-  const [editStatus, setEditStatus] = useState<'active' | 'inactive'>('active');
-  const [editRole, setEditRole] = useState<Role>('user');
+  const { data: teamsData = [] } = useTeamsQuery();
+  const teamsList = extractList(teamsData);
 
-  // Form state for changing team
-  const [selectedTeamId, setSelectedTeamId] = useState('');
+  const createUserMutation = useCreateUserMutation();
+  const updateUserMutation = useUpdateUserMutation();
+  const deleteUserMutation = useDeleteUserMutation();
 
-  const filteredUsers = userList.filter((u) => {
-    if (roleFilter === 'all') return true;
-    return u.role === roleFilter;
+  const [formData, setFormData] = useState({
+    name: '',
+    employeeId: '',
+    email: '',
+    password: '',
+    teamId: '',
+    role: 'user' as Role,
+    status: 'active' as UserStatus,
   });
 
-  const handleAddUser = () => {
-    if (!newName.trim() || !newEmail.trim() || !newEmpId.trim()) {
-      toast.error('Please fill in all required fields');
+  const handleOpenModal = (u?: User) => {
+    if (u) {
+      setEditingUser(u);
+      setFormData({
+        name: u.name,
+        employeeId: u.employeeId,
+        email: u.email,
+        password: '',
+        teamId: u.teamId || '',
+        role: u.role,
+        status: u.status,
+      });
+    } else {
+      setEditingUser(null);
+      setFormData({
+        name: '',
+        employeeId: `EMP${Math.floor(100 + Math.random() * 900)}`,
+        email: '',
+        password: '',
+        teamId: teamsList[0]?.id || '',
+        role: 'user',
+        status: 'active',
+      });
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim() || !formData.email.trim() || !formData.employeeId.trim()) {
+      toast.error('Name, Employee ID, and Email are required');
       return;
     }
+    try {
+      const payload: Record<string, any> = { ...formData };
+      if (editingUser && !payload.password) {
+        delete payload.password;
+      }
 
-    const team = teams.find((t) => t.id === newTeamId) || teams[0];
-    const newUser: User = {
-      id: `u_${Date.now()}`,
-      name: newName,
-      employeeId: newEmpId,
-      email: newEmail,
-      teamId: team.id,
-      teamName: team.name,
-      score: 0,
-      rank: userList.length + 1,
-      status: 'active',
-      role: newRole,
-      activitiesCompleted: 0,
-      avatarColor: '#3366ff',
-      joinedDate: new Date().toISOString().split('T')[0],
-      lastActive: 'Just now',
-    };
-
-    setUserList([newUser, ...userList]);
-    setAddOpen(false);
-    setNewName('');
-    setNewEmpId('');
-    setNewEmail('');
-    toast.success(`User "${newUser.name}" added successfully as ${newUser.role}!`);
-  };
-
-  const handleOpenEdit = (user: User) => {
-    setEditUser(user);
-    setEditName(user.name);
-    setEditEmpId(user.employeeId);
-    setEditEmail(user.email);
-    setEditStatus(user.status);
-    setEditRole(user.role);
-  };
-
-  const handleSaveEdit = () => {
-    if (!editUser) return;
-    setUserList((prev) =>
-      prev.map((u) =>
-        u.id === editUser.id
-          ? { ...u, name: editName, employeeId: editEmpId, email: editEmail, status: editStatus, role: editRole }
-          : u
-      )
-    );
-    setEditUser(null);
-    toast.success(`User "${editName}" updated successfully!`);
-  };
-
-  const handleOpenChangeTeam = (user: User) => {
-    setChangeTeam(user);
-    const available = teams.filter((t) => t.id !== user.teamId);
-    if (available.length > 0) {
-      setSelectedTeamId(available[0].id);
+      if (editingUser) {
+        await updateUserMutation.mutateAsync({ id: editingUser.id, payload });
+        toast.success('User updated successfully');
+      } else {
+        await createUserMutation.mutateAsync(payload);
+        toast.success('User created successfully');
+      }
+      setIsModalOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || 'Operation failed');
     }
   };
 
-  const handleSaveTeam = () => {
-    if (!changeTeam) return;
-    const targetTeam = teams.find((t) => t.id === selectedTeamId);
-    if (!targetTeam) return;
-
-    setUserList((prev) =>
-      prev.map((u) =>
-        u.id === changeTeam.id ? { ...u, teamId: targetTeam.id, teamName: targetTeam.name } : u
-      )
-    );
-    toast.success(`Moved ${changeTeam.name} to team ${targetTeam.name}!`);
-    setChangeTeam(null);
-  };
-
-  const handleToggleStatus = (user: User) => {
-    const nextStatus = user.status === 'active' ? 'inactive' : 'active';
-    setUserList((prev) =>
-      prev.map((u) => (u.id === user.id ? { ...u, status: nextStatus } : u))
-    );
-    if (nextStatus === 'active') {
-      toast.info(`Account for ${user.name} activated`);
-    } else {
-      toast.warning(`Account for ${user.name} deactivated`);
+  const handleConfirmDeleteUser = async () => {
+    if (!deletingUser) return;
+    try {
+      await deleteUserMutation.mutateAsync(deletingUser.id);
+      toast.success(`User "${deletingUser.name}" deleted successfully`);
+      setDeletingUser(null);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete user');
     }
   };
 
-  const handleToggleRole = (user: User) => {
-    const nextRole: Role = user.role === 'admin' ? 'user' : 'admin';
-    setUserList((prev) =>
-      prev.map((u) => (u.id === user.id ? { ...u, role: nextRole } : u))
-    );
-    toast.info(`Role for ${user.name} changed to ${nextRole.toUpperCase()}`);
-  };
+  const columns: Column<User>[] = [
+    {
+      key: 'name',
+      header: 'User',
+      sortable: true,
+      sortValue: (u) => u.name,
+      render: (u) => (
+        <div className="flex items-center gap-3">
+          <Avatar name={u.name} color={u.avatarColor} size="sm" />
+          <div>
+            <p className="font-semibold text-white">{u.name}</p>
+            <p className="text-xs text-slate-400">{u.email}</p>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'employeeId',
+      header: 'Employee ID',
+      sortable: true,
+      render: (u) => (
+        <Tooltip content={tooltips.users.employeeId} position="top">
+          <span className="font-mono text-xs text-purple-300 cursor-pointer">{u.employeeId}</span>
+        </Tooltip>
+      ),
+    },
+    {
+      key: 'teamName',
+      header: 'Team',
+      sortable: true,
+      render: (u) => <span className="text-slate-300">{u.teamName || 'Unassigned'}</span>,
+    },
+    {
+      key: 'role',
+      header: 'Role',
+      sortable: true,
+      render: (u) => (
+        <Tooltip content={tooltips.users.role} position="top">
+          <span
+            className={`badge ${
+              u.role === 'admin'
+                ? 'bg-purple-950/80 text-purple-300 border border-purple-700/50'
+                : 'bg-slate-800/80 text-slate-300 border border-slate-700/50'
+            }`}
+          >
+            {u.role === 'admin' && <Shield className="mr-1 h-3 w-3 text-purple-400" />}
+            {capitalize(u.role)}
+          </span>
+        </Tooltip>
+      ),
+    },
+    {
+      key: 'score',
+      header: 'Score',
+      sortable: true,
+      sortValue: (u) => u.score,
+      render: (u) => (
+        <Tooltip content={tooltips.users.score} position="top">
+          <span className="font-bold text-purple-400">{u.score} pts</span>
+        </Tooltip>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      render: (u) => (
+        <Tooltip content={tooltips.users.status} position="top">
+          <span
+            className={`badge ${
+              u.status === 'active'
+                ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800/50'
+                : 'bg-rose-950/80 text-rose-300 border border-rose-800/50'
+            }`}
+          >
+            {capitalize(u.status)}
+          </span>
+        </Tooltip>
+      ),
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      className: 'text-right',
+      render: (u) => (
+        <div className="flex justify-end gap-2">
+          <Tooltip content={tooltips.users.editUser} position="top">
+            <button onClick={() => handleOpenModal(u)} className="btn-icon">
+              <Edit2 className="h-4 w-4 text-slate-400 hover:text-white" />
+            </button>
+          </Tooltip>
+          <Tooltip content={tooltips.users.toggleUserStatus} position="top">
+            <button
+              onClick={() => setDeletingUser(u)}
+              disabled={deleteUserMutation.isPending}
+              className="btn-icon"
+            >
+              <Trash2 className="h-4 w-4 text-rose-400 hover:text-rose-300" />
+            </button>
+          </Tooltip>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">User & Admin Management</h1>
-          <p className="mt-1 text-sm text-ink-400">Manage all accounts, assign user vs admin roles, and change team groups.</p>
+          <h1 className="text-2xl font-bold text-white">Manage Users</h1>
+          <p className="mt-1 text-sm text-slate-400">View, add, edit, and assign roles to platform members.</p>
         </div>
-        <Button onClick={() => setAddOpen(true)}>
-          <UserPlus className="h-4 w-4" />
-          Add Account
-        </Button>
+        <Tooltip content={tooltips.users.addUser} position="left">
+          <button onClick={() => handleOpenModal()} className="btn-primary">
+            <Plus className="h-4 w-4" />
+            Add User
+          </button>
+        </Tooltip>
       </div>
 
-      {/* Role Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-[#26324A] pb-4">
-        <button
-          onClick={() => setRoleFilter('all')}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${
-            roleFilter === 'all'
-              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-              : 'bg-[#151E33] text-slate-300 border border-[#26324A] hover:bg-[#1C2742] hover:text-white'
-          }`}
-        >
-          All Accounts ({userList.length})
-        </button>
-        <button
-          onClick={() => setRoleFilter('user')}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${
-            roleFilter === 'user'
-              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-              : 'bg-[#151E33] text-slate-300 border border-[#26324A] hover:bg-[#1C2742] hover:text-white'
-          }`}
-        >
-          Users ({userList.filter((u) => u.role === 'user').length})
-        </button>
-        <button
-          onClick={() => setRoleFilter('admin')}
-          className={`rounded-xl px-4 py-2 text-sm font-semibold transition-all ${
-            roleFilter === 'admin'
-              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-              : 'bg-[#151E33] text-slate-300 border border-[#26324A] hover:bg-[#1C2742] hover:text-white'
-          }`}
-        >
-          Admins ({userList.filter((u) => u.role === 'admin').length})
-        </button>
-      </div>
+      <DataTable
+        columns={columns}
+        data={usersList}
+        isLoading={isLoadingUsers}
+        isFetching={isFetchingUsers}
+        searchable
+        searchPlaceholder="Search by name, email or employee ID..."
+        searchFields={(u) => [u.name, u.email, u.employeeId, u.teamName]}
+        meta={usersMeta}
+        onPageChange={setCurrentPage}
+        onPageSizeChange={(newSize) => {
+          setPageSize(newSize);
+          setCurrentPage(1);
+        }}
+        pageSizeOptions={[5, 10, 20, 50]}
+        emptyMessage="No users found."
+      />
 
-      <Card className="overflow-hidden border border-[#26324A]">
-        <Table<User>
-          columns={[
-            {
-              key: 'name',
-              header: 'Name',
-              render: (row) => (
-                <div className="flex items-center gap-3">
-                  <Avatar name={row.name} color={row.avatarColor} size="sm" />
-                  <div>
-                    <p className="font-bold text-white">{row.name}</p>
-                    <p className="text-xs text-slate-400">{row.email}</p>
-                  </div>
-                </div>
-              ),
-            },
-            { key: 'empId', header: 'Employee ID', render: (row) => <span className="font-mono text-xs font-semibold text-cyan-300">{row.employeeId}</span> },
-            {
-              key: 'role',
-              header: 'Users / Role',
-              render: (row) => (
-                <div className="flex items-center gap-2">
-                  <RoleBadge role={row.role} />
-                  <button
-                    onClick={() => handleToggleRole(row)}
-                    className="text-xs text-purple-400 hover:text-purple-300 underline"
-                    title="Toggle Role"
-                  >
-                    Switch
-                  </button>
-                </div>
-              ),
-            },
-            { key: 'team', header: 'Groups / Team', render: (row) => <span className="font-medium text-slate-200">{row.teamName}</span> },
-            { key: 'score', header: 'Score', render: (row) => <span className="font-display font-extrabold text-white">{row.score.toLocaleString()}</span> },
-            { key: 'status', header: 'Status', render: (row) => <StatusBadge status={row.status} /> },
-            {
-              key: 'actions',
-              header: 'Actions',
-              render: (row) => (
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setViewUser(row)} className="rounded-lg p-1.5 text-slate-400 hover:bg-[#1C2742] hover:text-purple-400" title="View Details">
-                    <Eye className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => handleOpenEdit(row)} className="rounded-lg p-1.5 text-slate-400 hover:bg-[#1C2742] hover:text-purple-400" title="Edit Account">
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button onClick={() => handleOpenChangeTeam(row)} className="rounded-lg p-1.5 text-slate-400 hover:bg-[#1C2742] hover:text-purple-400" title="Change Group/Team">
-                    <ArrowRightLeft className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => handleToggleStatus(row)}
-                    className={`rounded-lg p-1.5 ${row.status === 'active' ? 'text-slate-400 hover:bg-rose-500/20 hover:text-rose-400' : 'text-emerald-400 hover:bg-emerald-500/20'}`}
-                    title={row.status === 'active' ? 'Deactivate Account' : 'Activate Account'}
-                  >
-                    <Power className="h-4 w-4" />
-                  </button>
-                </div>
-              ),
-            },
-          ]}
-          data={filteredUsers}
-        />
-      </Card>
-
-
-      {/* Add user modal */}
+      {/* Modal */}
       <Modal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        title="Add New Account"
-        subtitle="Create a new user or admin account"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddUser}>Create Account</Button>
-          </>
-        }
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={editingUser ? 'Edit User' : 'Add New User'}
       >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+        <form onSubmit={handleSaveUser} className="space-y-4">
+          <div>
+            <div className="mb-1 flex items-center gap-1.5">
+              <label className="text-xs font-semibold text-slate-300">Full Name</label>
+              <InfoTooltip content={tooltips.users.name} />
+            </div>
+            <input
+              type="text"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className="input"
+              required
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-ink-600">Full Name</label>
+              <div className="mb-1 flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-slate-300">Employee ID</label>
+                <InfoTooltip content={tooltips.users.employeeId} />
+              </div>
               <input
                 type="text"
-                placeholder="Jane Doe"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                className="input-field"
+                value={formData.employeeId}
+                onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+                className="input font-mono"
+                required
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-ink-600">Employee ID</label>
+              <div className="mb-1 flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-slate-300">Email</label>
+                <InfoTooltip content={tooltips.users.email} />
+              </div>
               <input
-                type="text"
-                placeholder="EMP025"
-                value={newEmpId}
-                onChange={(e) => setNewEmpId(e.target.value)}
-                className="input-field"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="input"
+                required
               />
             </div>
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-600">Email Address</label>
+            <div className="mb-1 flex items-center gap-1.5">
+              <label className="text-xs font-semibold text-slate-300">
+                {editingUser ? 'New Password (optional)' : 'Password'}
+              </label>
+              <InfoTooltip content={tooltips.users.resetPassword} />
+            </div>
             <input
-              type="email"
-              placeholder="jane.doe@hat.co"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              className="input-field"
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="input"
+              placeholder={editingUser ? 'Leave blank to keep current password' : 'Enter new user password'}
+              required={!editingUser}
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-ink-600">Role / Type</label>
-              <select
-                className="input-field"
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value as Role)}
-              >
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-ink-600">Group / Team</label>
-              <select
-                className="input-field"
-                value={newTeamId}
-                onChange={(e) => setNewTeamId(e.target.value)}
-              >
-                {teams.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Edit user modal */}
-      <Modal
-        open={!!editUser}
-        onClose={() => setEditUser(null)}
-        title="Edit Account"
-        subtitle={editUser?.name}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setEditUser(null)}>Cancel</Button>
-            <Button onClick={handleSaveEdit}>Save Changes</Button>
-          </>
-        }
-      >
-        {editUser && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-ink-600">Full Name</label>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className="input-field"
-                />
+              <div className="mb-1 flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-slate-300">Team</label>
+                <InfoTooltip content={tooltips.users.team} />
               </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-ink-600">Employee ID</label>
-                <input
-                  type="text"
-                  value={editEmpId}
-                  onChange={(e) => setEditEmpId(e.target.value)}
-                  className="input-field"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-ink-600">Email Address</label>
-              <input
-                type="email"
-                value={editEmail}
-                onChange={(e) => setEditEmail(e.target.value)}
-                className="input-field"
+              <ReactSelect
+                options={[{ value: '', label: 'None' }, ...teamsList.map((t) => ({ value: t.id, label: t.name }))]}
+                value={
+                  formData.teamId
+                    ? {
+                        value: formData.teamId,
+                        label: teamsList.find((t) => t.id === formData.teamId)?.name || 'None',
+                      }
+                    : { value: '', label: 'None' }
+                }
+                onChange={(option) => setFormData({ ...formData, teamId: option?.value || '' })}
+                isSearchable
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-ink-600">Role / Type</label>
-                <select
-                  className="input-field"
-                  value={editRole}
-                  onChange={(e) => setEditRole(e.target.value as Role)}
-                >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                </select>
+            <div>
+              <div className="mb-1 flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-slate-300">Role</label>
+                <InfoTooltip content={tooltips.users.role} />
               </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-ink-600">Status</label>
-                <select
-                  className="input-field"
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value as 'active' | 'inactive')}
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        )}
-      </Modal>
-
-      {/* Change team modal */}
-      <Modal
-        open={!!changeTeam}
-        onClose={() => setChangeTeam(null)}
-        title="Change Group / Team"
-        subtitle={changeTeam ? `Move ${changeTeam.name} to a new team` : ''}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setChangeTeam(null)}>Cancel</Button>
-            <Button onClick={handleSaveTeam}>Change Team</Button>
-          </>
-        }
-      >
-        {changeTeam && (
-          <div className="space-y-3">
-            <div className="rounded-xl bg-ink-50 p-3">
-              <p className="text-sm text-ink-500">Current Group / Team</p>
-              <p className="text-base font-bold text-ink-900">{changeTeam.teamName}</p>
+              <ReactSelect
+                options={roleOptions}
+                value={roleOptions.find((opt) => opt.value === formData.role)}
+                onChange={(option) => setFormData({ ...formData, role: (option?.value || 'user') as Role })}
+                isSearchable={false}
+              />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-ink-600">New Group / Team</label>
-              <select
-                className="input-field"
-                value={selectedTeamId}
-                onChange={(e) => setSelectedTeamId(e.target.value)}
-              >
-                {teams.filter((t) => t.id !== changeTeam.teamId).map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
+              <div className="mb-1 flex items-center gap-1.5">
+                <label className="text-xs font-semibold text-slate-300">Status</label>
+                <InfoTooltip content={tooltips.users.status} />
+              </div>
+              <ReactSelect
+                options={userStatusOptions}
+                value={userStatusOptions.find((opt) => opt.value === formData.status)}
+                onChange={(option) => setFormData({ ...formData, status: (option?.value || 'active') as UserStatus })}
+                isSearchable={false}
+              />
             </div>
           </div>
-        )}
+
+          <div className="flex justify-end gap-3 pt-4">
+            <button type="button" onClick={() => setIsModalOpen(false)} className="btn-secondary">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createUserMutation.isPending || updateUserMutation.isPending}
+              className="btn-primary"
+            >
+              {createUserMutation.isPending || updateUserMutation.isPending ? 'Saving...' : 'Save User'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
-      {/* View user details modal */}
+      {/* Delete User Confirmation Modal */}
       <Modal
-        open={!!viewUser}
-        onClose={() => setViewUser(null)}
-        title="Account Details"
-        subtitle={viewUser?.name}
-        size="lg"
+        isOpen={!!deletingUser}
+        onClose={() => setDeletingUser(null)}
+        title="Delete User"
+        size="sm"
       >
-        {viewUser && (
-          <div className="space-y-5">
-            <div className="flex items-center gap-4">
-              <Avatar name={viewUser.name} color={viewUser.avatarColor} size="lg" />
-              <div>
-                <h3 className="text-lg font-bold text-ink-900">{viewUser.name}</h3>
-                <p className="text-sm text-ink-500">{viewUser.email}</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <RoleBadge role={viewUser.role} />
-                  <StatusBadge status={viewUser.status} />
-                  {viewUser.role === 'user' && <RankBadge rank={viewUser.rank} />}
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-xl bg-brand-50 p-3 text-center">
-                <p className="text-xs text-ink-400">Score</p>
-                <p className="text-lg font-bold text-ink-900">{viewUser.score.toLocaleString()}</p>
-              </div>
-              <div className="rounded-xl bg-success-50 p-3 text-center">
-                <p className="text-xs text-ink-400">Activities</p>
-                <p className="text-lg font-bold text-ink-900">{viewUser.activitiesCompleted}</p>
-              </div>
-              <div className="rounded-xl bg-accent-50 p-3 text-center">
-                <p className="text-xs text-ink-400">Group / Team</p>
-                <p className="text-lg font-bold text-ink-900">{viewUser.teamName}</p>
-              </div>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400">
+              <AlertTriangle className="h-6 w-6" />
             </div>
             <div>
-              <h4 className="mb-2 text-sm font-bold text-ink-900">Recent Activity</h4>
-              <div className="space-y-2">
-                {activityLogs.filter((l) => l.userId === viewUser.id).slice(0, 5).map((log) => (
-                  <div key={log.id} className="flex items-center justify-between rounded-xl bg-ink-50 p-3">
-                    <div>
-                      <p className="text-sm font-medium text-ink-800">{log.activityName}</p>
-                      <p className="text-xs text-ink-400">{log.date}</p>
-                    </div>
-                    <span className="text-sm font-bold text-ink-900">{log.score} pts</span>
-                  </div>
-                ))}
-              </div>
+              <h4 className="text-lg font-semibold text-white">Confirm Deletion</h4>
+              <p className="text-xs text-slate-400">This action cannot be undone.</p>
             </div>
           </div>
-        )}
+          <p className="text-sm text-slate-300">
+            Are you sure you want to delete user <span className="font-bold text-white">"{deletingUser?.name}"</span> ({deletingUser?.email})?
+          </p>
+          <div className="flex justify-end gap-3 pt-4 border-t border-[#26324A]">
+            <button
+              type="button"
+              onClick={() => setDeletingUser(null)}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmDeleteUser}
+              disabled={deleteUserMutation.isPending}
+              className="btn-danger flex items-center gap-2"
+            >
+              {deleteUserMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete User'
+              )}
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
 }
-

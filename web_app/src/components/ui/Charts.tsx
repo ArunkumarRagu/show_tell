@@ -131,3 +131,5 @@ export function DonutChart({ data, size = 160, centerLabel, centerValue }: Donut
     </div>
   );
 }
+
+export { DonutChart as PieChart };
