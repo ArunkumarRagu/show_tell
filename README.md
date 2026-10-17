@@ -29,8 +29,8 @@ A root `Makefile` is included to make building, managing, testing, and running c
 | `make restart` | Restart all Docker containers |
 | `make build` | Rebuild Docker containers |
 | `make dev-backend` | Run FastAPI dev server locally (`uvicorn --reload`) |
-| `make dev-frontend` | Run React frontend dev server locally (`npm run dev`) |
-| `make install` | Install Python backend requirements & NPM packages |
+| `make dev-frontend` | Run React frontend dev server locally (`pnpm run dev`) |
+| `make install` | Install Python backend requirements & pnpm packages |
 | `make test` | Run backend Pytest test suite |
 | `make migrate` | Execute Alembic database migrations |
 | `make help` | Display available Makefile targets |
@@ -109,9 +109,9 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ```bash
 cd web_app
-npm install
+pnpm install
 cp .env.example .env
-npm run dev
+pnpm run dev
 ```
 - App UI: [http://localhost:5173](http://localhost:5173)
 

@@ -1,0 +1,37 @@
+version: '3.8'
+
+# ── QA / Staging Overrides ──
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hat_app_qa}
+      POSTGRES_USER: ${POSTGRES_USER:-qa_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-qapassword}
+    volumes:
+      - postgres_qa_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ../api
+      target: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ../.env.qa
+
+  web_app:
+    build:
+      context: ../web_app
+      target: prod
+      args:
+        - VITE_API_URL=/api/v1
+    ports:
+      - "80:80"
+    volumes:
+      - ../config/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    env_file:
+      - ../.env.qa
+
+volumes:
+  postgres_qa_data:

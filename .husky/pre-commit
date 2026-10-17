@@ -1,0 +1,29 @@
+#!/bin/sh
+set -e
+
+echo "🚀 [Husky] Running pre-commit validation..."
+
+# ── 1. Frontend Checks (.ts, .tsx) ──
+echo "🎨 [Frontend] Checking formatting with Prettier..."
+(cd web_app && pnpm run format:check)
+
+echo "🔍 [Frontend] Checking code quality with ESLint..."
+(cd web_app && pnpm run lint)
+
+echo "🔬 [Frontend] Checking types with TypeScript..."
+(cd web_app && pnpm run typecheck)
+
+echo "📦 [Frontend] Checking build with Vite..."
+(cd web_app && pnpm run build)
+
+# ── 2. Backend Checks (.py) ──
+echo "🐍 [Backend] Checking formatting with Black..."
+python3 -m black --check api
+
+echo "🔍 [Backend] Checking code quality with Flake8..."
+python3 -m flake8 --config api/.flake8 api
+
+echo "🔤 [Backend] Checking typos with Codespell..."
+python3 -m codespell_lib api
+
+echo "✅ [Husky] All pre-commit checks passed successfully!"

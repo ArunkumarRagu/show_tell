@@ -1,0 +1,44 @@
+version: '3.8'
+
+# ── Local Development Overrides ──
+services:
+  postgres:
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hat_app_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgrespassword}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: ../api
+      target: dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../api:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ../.env.dev
+
+  web_app:
+    build:
+      context: ../web_app
+      target: dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../web_app:/app
+      - /app/node_modules
+    env_file:
+      - ../.env.dev
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+
+volumes:
+  postgres_dev_data:
